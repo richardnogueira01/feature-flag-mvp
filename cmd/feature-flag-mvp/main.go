@@ -24,21 +24,21 @@ func main() {
 	var service httpapi.Service
 	var database *persistence.Store
 	var stream nats.JetStreamContext
-	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL != "" {
+	if u := os.Getenv("DATABASE_URL"); u != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		pool, err := pgxpool.New(ctx, databaseURL)
-		if err != nil {
-			log.Fatal(err)
+		pool, e := pgxpool.New(ctx, u)
+		if e != nil {
+			log.Fatal(e)
 		}
-		if err := pool.Ping(ctx); err != nil {
+		if e = pool.Ping(ctx); e != nil {
 			pool.Close()
-			log.Fatal(err)
+			log.Fatal(e)
 		}
 		if os.Getenv("AUTO_MIGRATE") == "true" {
-			if err := persistence.Migrate(ctx, pool); err != nil {
+			if e = persistence.Migrate(ctx, pool); e != nil {
 				pool.Close()
-				log.Fatal(err)
+				log.Fatal(e)
 			}
 		}
 		defer pool.Close()
@@ -54,47 +54,44 @@ func main() {
 	syncState := syncer.New(data, fetcher)
 	syncState.SetObserver(operationalMetrics)
 	if database != nil {
-		initial, err := database.Snapshot(context.Background())
-		if err != nil {
-			log.Fatal(err)
+		initial, e := database.Snapshot(context.Background())
+		if e != nil {
+			log.Fatal(e)
 		}
-		if err := syncState.Initialize(initial); err != nil {
-			log.Fatal(err)
+		if e = syncState.Initialize(initial); e != nil {
+			log.Fatal(e)
 		}
 	}
-	var eventPublisher *messaging.Publisher
-	if natsURL := os.Getenv("NATS_URL"); natsURL != "" {
-		conn, err := nats.Connect(natsURL)
-		if err != nil {
-			log.Fatal(err)
+	var publisher *messaging.Publisher
+	if u := os.Getenv("NATS_URL"); u != "" {
+		conn, e := nats.Connect(u)
+		if e != nil {
+			log.Fatal(e)
 		}
 		defer conn.Drain()
-		stream, err = conn.JetStream()
-		if err != nil {
-			log.Fatal(err)
+		stream, e = conn.JetStream()
+		if e != nil {
+			log.Fatal(e)
 		}
-		subject := getenv("NATS_SUBJECT", "feature-flags.events")
-		durable := getenv("NATS_DURABLE", "feature-flag-mvp")
-		if _, err := messaging.NewSubscriber(stream).Subscribe(subject, durable, syncState.Apply); err != nil {
-			log.Fatal(err)
+		if _, e = messaging.NewSubscriber(stream).Subscribe(getenv("NATS_SUBJECT", "feature-flags.events"), getenv("NATS_DURABLE", "feature-flag-mvp"), syncState.Apply); e != nil {
+			log.Fatal(e)
 		}
-		eventPublisher = messaging.NewPublisher(stream, subject)
+		publisher = messaging.NewPublisher(stream, getenv("NATS_SUBJECT", "feature-flags.events"))
 	}
 	if database != nil && stream != nil {
-		worker := persistence.NewWorkerWithObserver(database, eventPublisher, 100, time.Second, operationalMetrics)
+		worker := persistence.NewWorkerWithObserver(database, publisher, 100, time.Second, operationalMetrics)
 		go func() {
-			if err := worker.Run(context.Background()); err != nil {
-				log.Printf("outbox worker stopped: %v", err)
+			if e := worker.Run(context.Background()); e != nil {
+				log.Printf("outbox worker stopped: %v", e)
 			}
 		}()
-		log.Println("outbox worker enabled")
 	}
-	applicationMetrics := appmetrics.New(prometheus.DefaultRegisterer)
+	m := appmetrics.New(prometheus.DefaultRegisterer)
 	mux := http.NewServeMux()
-	flagsHandler := applicationMetrics.Middleware(httpapi.NewHandler(service))
-	mux.Handle("/v1/flags", flagsHandler)
-	mux.Handle("/v1/flags/", flagsHandler)
-	mux.Handle("/v1/evaluate/", httpapi.NewEvaluateHandler(data, applicationMetrics.ObserveEvaluation))
+	fh := m.Middleware(httpapi.NewHandler(service))
+	mux.Handle("/v1/flags", fh)
+	mux.Handle("/v1/flags/", fh)
+	mux.Handle("/v1/evaluate/", httpapi.NewEvaluateHandler(data, m.ObserveEvaluation))
 	status := httpapi.NewStatusHandler(syncState)
 	mux.Handle("/healthz", status)
 	mux.Handle("/readyz", status)
@@ -104,11 +101,12 @@ func main() {
 	swagger := httpapi.SwaggerUIHandler()
 	mux.Handle("/swagger", swagger)
 	mux.Handle("/swagger/", swagger)
+	mux.Handle("/test/large-payload", httpapi.LargePayloadTestHandler())
 	log.Fatal(http.ListenAndServe(":8080", mux))
 }
-func getenv(key, fallback string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+func getenv(k, f string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
 	}
-	return fallback
+	return f
 }
