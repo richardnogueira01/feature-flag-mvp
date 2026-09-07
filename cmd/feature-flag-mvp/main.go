@@ -47,6 +47,7 @@ func main() {
 	}
 
 	syncState := syncer.New(data, nil)
+	syncState.SetObserver(operationalMetrics)
 	if natsURL := os.Getenv("NATS_URL"); natsURL != "" {
 		conn, err := nats.Connect(natsURL)
 		if err != nil {
@@ -71,7 +72,6 @@ func main() {
 	mux.Handle("/readyz", status)
 	mux.Handle("/internal/status", status)
 	mux.Handle("/metrics", promhttp.Handler())
-	log.Println("feature-flag-mvp listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", mux))
 }
 

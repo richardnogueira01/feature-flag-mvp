@@ -12,16 +12,26 @@ var ErrRevisionGap = errors.New("snapshot revision gap")
 
 type Fetcher func(context.Context) (*snapshot.Snapshot, error)
 
+type Observer interface {
+	ObserveGap()
+	ObserveResync(bool)
+}
+
 type Syncer struct {
 	mu           sync.Mutex
 	store        *snapshot.Store
 	fetch        Fetcher
+	observer     Observer
 	synchronized bool
 	resyncing    bool
 }
 
 func New(store *snapshot.Store, fetch Fetcher) *Syncer {
-	return &Syncer{store: store, fetch: fetch}
+	return NewWithObserver(store, fetch, nil)
+}
+
+func NewWithObserver(store *snapshot.Store, fetch Fetcher, observer Observer) *Syncer {
+	return &Syncer{store: store, fetch: fetch, observer: observer}
 }
 
 func (s *Syncer) Apply(ctx context.Context, next *snapshot.Snapshot) error {
@@ -35,6 +45,9 @@ func (s *Syncer) Apply(ctx context.Context, next *snapshot.Snapshot) error {
 		return nil
 	}
 	if current != 0 && next.Revision != current+1 {
+		if s.observer != nil {
+			s.observer.ObserveGap()
+		}
 		s.mu.Unlock()
 		return s.resync(ctx)
 	}
@@ -56,10 +69,14 @@ func (s *Syncer) resync(ctx context.Context) error {
 	}
 	s.resyncing = true
 	s.mu.Unlock()
+	success := false
 	defer func() {
 		s.mu.Lock()
 		s.resyncing = false
 		s.mu.Unlock()
+		if s.observer != nil {
+			s.observer.ObserveResync(success)
+		}
 	}()
 	if s.fetch == nil {
 		return errors.New("snapshot fetcher is not configured")
@@ -75,6 +92,7 @@ func (s *Syncer) resync(ctx context.Context) error {
 	s.store.Publish(next)
 	s.synchronized = true
 	s.mu.Unlock()
+	success = true
 	return nil
 }
 
