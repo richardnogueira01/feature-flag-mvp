@@ -17,18 +17,17 @@ readiness indica snapshot sincronizado. Nenhum secret pode ser versionado.
 - Compose com PostgreSQL 17, NATS 2.11 JetStream e app.
 - Configuração por DATABASE_URL, AUTO_MIGRATE, NATS_URL, NATS_SUBJECT e NATS_DURABLE.
 - Migration inicial embutida e execução opcional via AUTO_MIGRATE=true.
-- docs/LOCAL-DEVELOPMENT.md.
 - Endpoints /healthz, /readyz, /internal/status e /metrics.
-- Métricas de avaliações, latência, requests HTTP, gaps e resync.
-- Worker da outbox emite sucesso/falha por evento.
+- Métricas de avaliações, latência, HTTP, gaps, resync e outbox.
+- Worker da outbox iniciado quando PostgreSQL e NATS estão configurados.
 - Labels limitados; key de flag não é label.
 - POSTGRES_PASSWORD exigida externamente.
 
 ## Ainda necessário
 
-- Instanciar o worker da outbox no startup quando PostgreSQL e NATS estiverem ativos.
-- Adicionar smoke test com dependências reais.
+- Adicionar smoke test com Compose real.
 - Validar sincronização inicial antes do readiness.
+- Garantir configuração do stream JetStream antes do subscriber.
 
 ## Evidências
 
@@ -40,7 +39,7 @@ readiness indica snapshot sincronizado. Nenhum secret pode ser versionado.
 
 ## Aceite
 
-- [ ] Worker executa no Compose e publica eventos.
+- [ ] Worker publica eventos no Compose.
 - [ ] Smoke test com Compose passa.
 - [ ] Sincronização inicial validada.
 - [ ] Marcar done e mover para docs/history/.

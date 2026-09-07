@@ -23,6 +23,8 @@ import (
 func main() {
 	data := snapshot.NewStore(nil)
 	var service httpapi.Service
+	var database *persistence.Store
+	var stream nats.JetStreamContext
 	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -41,26 +43,40 @@ func main() {
 			}
 		}
 		defer pool.Close()
-		service = control.NewPersistentService(persistence.NewControlAdapter(persistence.NewStore(pool)), data)
+		database = persistence.NewStore(pool)
+		service = control.NewPersistentService(persistence.NewControlAdapter(database), data)
 	} else {
 		service = control.NewService(data)
 	}
 
 	syncState := syncer.New(data, nil)
 	syncState.SetObserver(operationalMetrics)
+	var eventPublisher *messaging.Publisher
 	if natsURL := os.Getenv("NATS_URL"); natsURL != "" {
 		conn, err := nats.Connect(natsURL)
 		if err != nil {
 			log.Fatal(err)
 		}
 		defer conn.Drain()
-		stream, err := conn.JetStream()
+		stream, err = conn.JetStream()
 		if err != nil {
 			log.Fatal(err)
 		}
-		if _, err := messaging.NewSubscriber(stream).Subscribe(getenv("NATS_SUBJECT", "feature-flags.events"), getenv("NATS_DURABLE", "feature-flag-mvp"), syncState.Apply); err != nil {
+		subject := getenv("NATS_SUBJECT", "feature-flags.events")
+		durable := getenv("NATS_DURABLE", "feature-flag-mvp")
+		if _, err := messaging.NewSubscriber(stream).Subscribe(subject, durable, syncState.Apply); err != nil {
 			log.Fatal(err)
 		}
+		eventPublisher = messaging.NewPublisher(stream, subject)
+	}
+	if database != nil && stream != nil {
+		worker := persistence.NewWorkerWithObserver(database, eventPublisher, 100, time.Second, operationalMetrics)
+		go func() {
+			if err := worker.Run(context.Background()); err != nil {
+				log.Printf("outbox worker stopped: %v", err)
+			}
+		}()
+		log.Println("outbox worker enabled")
 	}
 
 	applicationMetrics := appmetrics.New(prometheus.DefaultRegisterer)
