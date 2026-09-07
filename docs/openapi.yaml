@@ -1,0 +1,70 @@
+openapi: 3.0.3
+info:
+  title: Feature Flag MVP API
+  version: 0.1.0
+  description: API mínima para administrar e avaliar feature flags.
+servers:
+  - url: http://localhost:8080
+paths:
+  /v1/flags:
+    get:
+      summary: Lista todas as flags
+      responses:
+        '200':
+          description: Lista ordenada por key
+          content: {application/json: {schema: {$ref: '#/components/schemas/FlagList'}}}
+    post:
+      summary: Cria uma flag
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/FlagInput'}}}
+      responses:
+        '201': {description: Flag criada, content: {application/json: {schema: {$ref: '#/components/schemas/Flag'}}}}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '409': {$ref: '#/components/responses/Conflict'}
+  /v1/flags/{key}:
+    parameters: [{name: key, in: path, required: true, schema: {type: string, maxLength: 128}}]
+    get:
+      summary: Consulta uma flag
+      responses:
+        '200': {description: Flag, content: {application/json: {schema: {$ref: '#/components/schemas/Flag'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      summary: Atualiza uma flag
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/FlagInput'}}}
+      responses:
+        '200': {description: Flag atualizada, content: {application/json: {schema: {$ref: '#/components/schemas/Flag'}}}}
+        '404': {$ref: '#/components/responses/NotFound'}
+    delete:
+      summary: Remove uma flag
+      responses:
+        '204': {description: Flag removida}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/evaluate/{key}:
+    get:
+      summary: Avalia uma flag no snapshot local
+      parameters: [{name: key, in: path, required: true, schema: {type: string}}]
+      responses:
+        '200': {description: Resultado, content: {application/json: {schema: {$ref: '#/components/schemas/Evaluation'}}}}
+        '404': {description: Flag inexistente}
+  /healthz:
+    get: {summary: Liveness, responses: {'200': {description: Processo ativo}}}
+  /readyz:
+    get: {summary: Readiness, responses: {'200': {description: Snapshot sincronizado}, '503': {description: Ainda não sincronizado}}}
+  /internal/status:
+    get: {summary: Status operacional, responses: {'200': {description: Status}}}
+  /metrics:
+    get: {summary: Métricas Prometheus, responses: {'200': {description: Métricas}}}
+components:
+  schemas:
+    FlagInput: {type: object, required: [enabled], properties: {key: {type: string, maxLength: 128}, enabled: {type: boolean}}}
+    Flag: {type: object, properties: {Key: {type: string}, Enabled: {type: boolean}, Revision: {type: integer, format: int64}}}
+    FlagList: {type: object, properties: {flags: {type: array, items: {$ref: '#/components/schemas/Flag'}}}}
+    Evaluation: {type: object, properties: {enabled: {type: boolean}, revision: {type: integer, format: int64}}}
+    Error: {type: object, properties: {error: {type: string}}}
+  responses:
+    BadRequest: {description: Requisição inválida, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Conflict: {description: Conflito, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    NotFound: {description: Não encontrado, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}

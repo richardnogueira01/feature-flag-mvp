@@ -2,11 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
-	"net/http"
-	"os"
-	"time"
-
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus"
@@ -18,6 +13,10 @@ import (
 	"github.com/richardnogueira01/feature-flag-mvp/internal/persistence"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/snapshot"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/syncer"
+	"log"
+	"net/http"
+	"os"
+	"time"
 )
 
 func main() {
@@ -25,7 +24,6 @@ func main() {
 	var service httpapi.Service
 	var database *persistence.Store
 	var stream nats.JetStreamContext
-
 	if databaseURL := os.Getenv("DATABASE_URL"); databaseURL != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -49,7 +47,6 @@ func main() {
 	} else {
 		service = control.NewService(data)
 	}
-
 	var fetcher syncer.Fetcher
 	if database != nil {
 		fetcher = database.Snapshot
@@ -65,7 +62,6 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-
 	var eventPublisher *messaging.Publisher
 	if natsURL := os.Getenv("NATS_URL"); natsURL != "" {
 		conn, err := nats.Connect(natsURL)
@@ -93,7 +89,6 @@ func main() {
 		}()
 		log.Println("outbox worker enabled")
 	}
-
 	applicationMetrics := appmetrics.New(prometheus.DefaultRegisterer)
 	mux := http.NewServeMux()
 	mux.Handle("/v1/flags", applicationMetrics.Middleware(httpapi.NewHandler(service)))
@@ -103,9 +98,9 @@ func main() {
 	mux.Handle("/readyz", status)
 	mux.Handle("/internal/status", status)
 	mux.Handle("/metrics", promhttp.Handler())
+	mux.Handle("/swagger.yaml", httpapi.OpenAPISpecHandler())
 	log.Fatal(http.ListenAndServe(":8080", mux))
 }
-
 func getenv(key, fallback string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
