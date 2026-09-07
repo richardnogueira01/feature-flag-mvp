@@ -14,7 +14,7 @@ import (
 	"github.com/richardnogueira01/feature-flag-mvp/internal/control"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/httpapi"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/messaging"
-	"github.com/richardnogueira01/feature-flag-mvp/internal/metrics"
+	appmetrics "github.com/richardnogueira01/feature-flag-mvp/internal/metrics"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/persistence"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/snapshot"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/syncer"
@@ -33,6 +33,13 @@ func main() {
 		if err := pool.Ping(ctx); err != nil {
 			pool.Close()
 			log.Fatal(err)
+		}
+		if os.Getenv("AUTO_MIGRATE") == "true" {
+			if err := persistence.Migrate(ctx, pool); err != nil {
+				pool.Close()
+				log.Fatal(err)
+			}
+			log.Println("database migrations applied")
 		}
 		defer pool.Close()
 		service = control.NewPersistentService(persistence.NewControlAdapter(persistence.NewStore(pool)), data)
@@ -53,21 +60,17 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		subject := getenv("NATS_SUBJECT", "feature-flags.events")
-		durable := getenv("NATS_DURABLE", "feature-flag-mvp")
-		if _, err := messaging.NewSubscriber(stream).Subscribe(subject, durable, syncState.Apply); err != nil {
+		if _, err := messaging.NewSubscriber(stream).Subscribe(getenv("NATS_SUBJECT", "feature-flags.events"), getenv("NATS_DURABLE", "feature-flag-mvp"), syncState.Apply); err != nil {
 			log.Fatal(err)
 		}
-		log.Printf("subscribed to NATS subject %s with durable %s", subject, durable)
-	} else {
-		log.Println("NATS subscriber disabled; set NATS_URL to enable distribution")
+		log.Println("NATS subscriber enabled")
 	}
 
-	applicationMetrics := metrics.New(prometheus.DefaultRegisterer)
-	api := httpapi.NewHandler(service)
+	applicationMetrics := appmetrics.New(prometheus.DefaultRegisterer)
+	api := applicationMetrics.Middleware(httpapi.NewHandler(service))
 	status := httpapi.NewStatusHandler(syncState)
 	mux := http.NewServeMux()
-	mux.Handle("/v1/flags", applicationMetrics.Middleware(api))
+	mux.Handle("/v1/flags", api)
 	mux.Handle("/healthz", status)
 	mux.Handle("/readyz", status)
 	mux.Handle("/internal/status", status)
