@@ -4,19 +4,26 @@
 - Tipo: infra
 - Status: planned
 - Branch: task/feature-flag-mvp-observability-deployment
-- Criada: 2026-09-07
+- Dependências: 004-nats-sync-readiness
 
-## Descrição
+## Contexto
 
-Adicionar métricas, health checks, Docker Compose e documentação de execução local.
+O MVP roda localmente com PostgreSQL, NATS/JetStream e múltiplas instâncias. Liveness indica
+processo vivo; readiness indica snapshot sincronizado. Nenhum secret pode ser versionado.
 
-## Critérios de aceite
+## Objetivo e implementação
 
-- [ ] Métricas de avaliação, revisão e sincronização.
-- [ ] Health e readiness distinguem serviço vivo de instância sincronizada.
-- [ ] Compose sobe PostgreSQL, NATS e serviço.
-- [ ] Configuração não contém secrets.
+- Criar /healthz para liveness e /readyz para readiness.
+- Expor métricas Prometheus de avaliação, latência, revisão, gaps, resync e outbox.
+- Usar labels de baixa cardinalidade; nunca usar key como label.
+- Criar Dockerfile multi-stage e docker-compose.yml com PostgreSQL, NATS JetStream e serviço.
+- Documentar variáveis, portas, migrações, startup e shutdown.
+- Adicionar logs estruturados sem payloads sensíveis.
 
-## Dependências
+## Testes e aceite
 
-004-nats-sync-readiness.
+- [ ] docker compose config passa.
+- [ ] Health/readiness refletem corretamente o estado do snapshot.
+- [ ] Smoke test cria e avalia uma flag.
+- [ ] go test ./..., go vet ./... e build da imagem passam.
+- [ ] Marcar done, registrar evidências e mover para docs/history/.
