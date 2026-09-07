@@ -2,30 +2,48 @@
 
 - Projeto: feature-flag-mvp
 - Tipo: feature
-- Status: planned
-- Branch: task/feature-flag-mvp-nats-sync-readiness
+- Status: in-progress
+- Branch: task/feature-flag-mvp-mvp
 - Dependências: 003-postgres-outbox
 
 ## Contexto
 
-Instâncias recebem revisões via NATS/JetStream. A próxima revisão esperada é local + 1; revisão
-maior indica gap e exige full resync pela fonte de verdade. Snapshot válido continua servindo
+Instâncias do Data Plane recebem revisões via NATS/JetStream. A próxima revisão esperada é local + 1;
+revisão maior indica gap e exige full resync pela fonte de verdade. Snapshot válido continua servindo
 durante falhas externas.
 
-## Objetivo e implementação
+## Implementado
 
-- Definir evento versionado com id, revision, event_type e payload.
-- Subscriber descarta eventos antigos, aplica o próximo e troca snapshot atomicamente.
-- Gap marca sincronização degradada e solicita snapshot completo.
-- Full resync obtém revisão atual, publica snapshot e limpa degradação.
-- GET /internal/status retorna status, revision, snapshot_hash e synchronized.
-- Readiness só tem sucesso após primeiro snapshot válido.
-- Reconexão do NATS não interrompe avaliações com snapshot antigo.
+- Dependência nats.go.
+- messaging.Publisher compatível com persistence.Publisher.
+- syncer.Syncer com Apply, Resync e Fetcher injetável.
+- Revisões antigas são ignoradas.
+- Gaps iniciam full resync.
+- Ready só fica true após snapshot válido.
+- Testes unitários de sequência, revisão antiga e gap.
 
-## Testes e aceite
+## Ainda necessário
 
-- [ ] Testar evento sequencial, atrasado e com gap.
-- [ ] Testar que gap dispara resync sem concorrência duplicada.
-- [ ] Testar instância sem snapshot como não-ready.
-- [ ] Testar falha de NATS/PostgreSQL preservando avaliação local.
-- [ ] Passar testes de integração e mover spec concluída para docs/history/.
+- Criar subscriber JetStream com durable consumer e ack explícito.
+- Integrar o evento da outbox ao formato de snapshot distribuído.
+- Implementar endpoint /internal/status e endpoint /readyz.
+- Garantir que resync concorrente faça apenas uma requisição.
+- Criar testes de integração com NATS/JetStream.
+
+## Aceite
+
+- [ ] Subscriber real recebe, aplica e confirma eventos.
+- [ ] Evento atrasado não altera snapshot.
+- [ ] Gap dispara resync e não perde consistência.
+- [ ] Nova instância não fica ready antes do sync.
+- [ ] Testes NATS reais passam.
+- [ ] Marcar done e mover para docs/history/.
+
+## Evidências atuais
+
+- go get github.com/nats-io/nats.go@v1.39.1: OK
+- gofmt -w internal: OK
+- go test ./...: OK
+- go vet ./...: OK
+- go build ./...: OK
+- git diff --check: OK
