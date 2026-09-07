@@ -8,13 +8,13 @@ const flagKey = __ENV.FLAG_KEY || 'menu_itau_mobile';
 const errors = new Rate('evaluate_errors');
 
 export const options = {
-  gracefulStop: __ENV.GRACEFUL_STOP || '5s',
   scenarios: {
     evaluate: {
       executor: 'constant-arrival-rate',
       rate: target,
       timeUnit: '1s',
       duration: __ENV.DURATION || '30s',
+      gracefulStop: __ENV.GRACEFUL_STOP || '5s',
       preAllocatedVUs: Number(__ENV.PREALLOCATED_VUS || Math.min(target, 10000)),
       maxVUs: Number(__ENV.MAX_VUS || Math.max(target * 2, 20000)),
     },
