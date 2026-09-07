@@ -39,14 +39,11 @@ func main() {
 				pool.Close()
 				log.Fatal(err)
 			}
-			log.Println("database migrations applied")
 		}
 		defer pool.Close()
 		service = control.NewPersistentService(persistence.NewControlAdapter(persistence.NewStore(pool)), data)
-		log.Println("using PostgreSQL control plane")
 	} else {
 		service = control.NewService(data)
-		log.Println("using in-memory control plane; set DATABASE_URL for PostgreSQL")
 	}
 
 	syncState := syncer.New(data, nil)
@@ -63,14 +60,13 @@ func main() {
 		if _, err := messaging.NewSubscriber(stream).Subscribe(getenv("NATS_SUBJECT", "feature-flags.events"), getenv("NATS_DURABLE", "feature-flag-mvp"), syncState.Apply); err != nil {
 			log.Fatal(err)
 		}
-		log.Println("NATS subscriber enabled")
 	}
 
 	applicationMetrics := appmetrics.New(prometheus.DefaultRegisterer)
-	api := applicationMetrics.Middleware(httpapi.NewHandler(service))
-	status := httpapi.NewStatusHandler(syncState)
 	mux := http.NewServeMux()
-	mux.Handle("/v1/flags", api)
+	mux.Handle("/v1/flags", applicationMetrics.Middleware(httpapi.NewHandler(service)))
+	mux.Handle("/v1/evaluate/", httpapi.NewEvaluateHandler(data, applicationMetrics.ObserveEvaluation))
+	status := httpapi.NewStatusHandler(syncState)
 	mux.Handle("/healthz", status)
 	mux.Handle("/readyz", status)
 	mux.Handle("/internal/status", status)
