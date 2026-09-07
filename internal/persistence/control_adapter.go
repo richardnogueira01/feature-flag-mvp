@@ -2,11 +2,11 @@ package persistence
 
 import (
 	"context"
+	"errors"
 
 	"github.com/richardnogueira01/feature-flag-mvp/internal/control"
 )
 
-// ControlAdapter exposes Store through the control-plane persistence port.
 type ControlAdapter struct {
 	store *Store
 }
@@ -24,11 +24,18 @@ func (a *ControlAdapter) Apply(ctx context.Context, key string, enabled bool) (c
 }
 
 func (a *ControlAdapter) Delete(ctx context.Context, key string) error {
-	return a.store.Delete(ctx, key)
+	err := a.store.Delete(ctx, key)
+	if errors.Is(err, ErrNotFound) {
+		return control.ErrNotFound
+	}
+	return err
 }
 
 func (a *ControlAdapter) Get(ctx context.Context, key string) (control.Flag, error) {
 	flag, err := a.store.Get(ctx, key)
+	if errors.Is(err, ErrNotFound) {
+		return control.Flag{}, control.ErrNotFound
+	}
 	if err != nil {
 		return control.Flag{}, err
 	}
