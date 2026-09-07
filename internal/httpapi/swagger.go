@@ -19,6 +19,10 @@ paths:
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ValueRequest'}, example: {value: {retries: 3}}}}}
       responses: {'200': {description: Atualizada}}
     delete: {responses: {'204': {description: Removida}}}
+    patch:
+      summary: Ativa ou desativa uma flag sem alterar seu value
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [enabled], properties: {enabled: {type: boolean}}}, example: {enabled: false}}}}
+      responses: {'200': {description: Estado atualizado}, '400': {description: enabled obrigatório}, '404': {description: Inexistente}}}
   /v1/evaluate/{key}:
     get:
       parameters: [{name: key, in: path, required: true, schema: {type: string}}]
