@@ -63,8 +63,11 @@ func (s *Service) mutate(key string, value json.RawMessage, create bool) (Flag, 
 		return Flag{}, ErrNotFound
 	}
 	s.revision++
-	var enabled bool
-	_ = json.Unmarshal(value, &enabled)
+	enabled := true
+	var boolValue bool
+	if json.Unmarshal(value, &boolValue) == nil {
+		enabled = boolValue
+	}
 	flag := Flag{Key: key, Enabled: enabled, Value: append(json.RawMessage(nil), value...), Revision: s.revision}
 	s.flags[key] = flag
 	s.publishLocked()

@@ -31,6 +31,10 @@ func NewEvaluateHandler(store *snapshot.Store, observe EvaluateObserver) http.Ha
 			writeJSON(w, 404, map[string]any{"error": "flag not found", "revision": revision})
 			return
 		}
+		if !enabled {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		writeJSON(w, 200, map[string]any{"value": value, "enabled": enabled, "revision": revision})
 	})
 }

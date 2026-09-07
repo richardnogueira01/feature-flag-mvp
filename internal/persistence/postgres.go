@@ -32,8 +32,11 @@ func (s *Store) ApplyValue(c context.Context, k string, v json.RawMessage) (Flag
 	if e = tx.QueryRow(c, `UPDATE revision_counter SET revision=revision+1 WHERE id=1 RETURNING revision`).Scan(&rev); e != nil {
 		return Flag{}, e
 	}
-	var enabled bool
-	_ = json.Unmarshal(v, &enabled)
+	enabled := true
+	var boolValue bool
+	if json.Unmarshal(v, &boolValue) == nil {
+		enabled = boolValue
+	}
 	var f Flag
 	if e = tx.QueryRow(c, `INSERT INTO feature_flags(key,enabled,value,revision) VALUES($1,$2,$3,$4) ON CONFLICT(key) DO UPDATE SET enabled=EXCLUDED.enabled,value=EXCLUDED.value,revision=EXCLUDED.revision,updated_at=now() RETURNING key,enabled,value,revision`, k, enabled, v, rev).Scan(&f.Key, &f.Enabled, &f.Value, &f.Revision); e != nil {
 		return Flag{}, e
