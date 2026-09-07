@@ -14,22 +14,20 @@ readiness indica snapshot sincronizado. Nenhum secret pode ser versionado.
 ## Implementado
 
 - Dockerfile multi-stage com imagem distroless nonroot.
-- .dockerignore sem docs, Git ou artefatos.
 - Compose com PostgreSQL 17, NATS 2.11 JetStream e app.
-- PostgreSQL com healthcheck e depends_on condicionado à saúde.
 - Configuração por DATABASE_URL, AUTO_MIGRATE, NATS_URL, NATS_SUBJECT e NATS_DURABLE.
-- Migration inicial embutida no binário e aplicada opcionalmente com AUTO_MIGRATE=true.
+- Migration inicial embutida e execução opcional via AUTO_MIGRATE=true.
 - docs/LOCAL-DEVELOPMENT.md.
-- Métricas Prometheus de avaliações, latência e requests HTTP.
 - Endpoint /metrics e middleware HTTP.
-- Labels limitados; key de flag não é label.
-- POSTGRES_PASSWORD exigida externamente.
+- Métricas de avaliações, latência e requests HTTP.
+- Coletores operacionais de gaps, resync e outbox, com labels limitados.
+- POSTGRES_PASSWORD exigida externamente, sem senha versionada.
 
 ## Ainda necessário
 
-- Adicionar métricas de revisão, gaps, resync e outbox.
+- Emitir as métricas operacionais dentro de Syncer e Worker.
 - Adicionar smoke test com dependências reais.
-- Configurar sincronização inicial real antes de readiness.
+- Validar sincronização inicial antes do readiness.
 
 ## Evidências
 
@@ -41,7 +39,7 @@ readiness indica snapshot sincronizado. Nenhum secret pode ser versionado.
 
 ## Aceite
 
-- [ ] Métricas e smoke test completos.
+- [ ] Métricas de gaps/resync/outbox recebem eventos reais.
+- [ ] Smoke test com Compose passa.
 - [ ] Sincronização inicial validada.
-- [ ] Testes reais passam.
 - [ ] Marcar done e mover para docs/history/.
