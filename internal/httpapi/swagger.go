@@ -25,3 +25,10 @@ func OpenAPISpecHandler() http.Handler {
 		_, _ = w.Write([]byte(openAPISpec))
 	})
 }
+
+func SwaggerUIHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Feature Flag MVP - Swagger</title><link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css"></head><body><div id="swagger-ui"></div><script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script><script>window.onload=()=>SwaggerUIBundle({url:'/swagger.yaml',dom_id:'#swagger-ui'});</script></body></html>`))
+	})
+}

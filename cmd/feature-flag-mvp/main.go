@@ -99,6 +99,9 @@ func main() {
 	mux.Handle("/internal/status", status)
 	mux.Handle("/metrics", promhttp.Handler())
 	mux.Handle("/swagger.yaml", httpapi.OpenAPISpecHandler())
+	swagger := httpapi.SwaggerUIHandler()
+	mux.Handle("/swagger", swagger)
+	mux.Handle("/swagger/", swagger)
 	log.Fatal(http.ListenAndServe(":8080", mux))
 }
 func getenv(key, fallback string) string {
