@@ -6,8 +6,6 @@ import (
 	"github.com/richardnogueira01/feature-flag-mvp/internal/snapshot"
 )
 
-// PersistentService adapts the control-plane operations to a Repository.
-// The repository owns the transaction; this service owns domain validation and snapshot refresh.
 type PersistentService struct {
 	repo Repository
 	data *snapshot.Store
@@ -79,8 +77,8 @@ func (s *PersistentService) refreshSnapshot() {
 	if s.data == nil {
 		return
 	}
-	flags := s.repo.List(context.Background())
-	if len(flags) == 0 {
+	flags, err := s.repo.List(context.Background())
+	if err != nil || len(flags) == 0 {
 		return
 	}
 	snapshotFlags := make(map[string]snapshot.Flag, len(flags))
