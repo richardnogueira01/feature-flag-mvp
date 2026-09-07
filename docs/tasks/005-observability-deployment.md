@@ -8,23 +8,26 @@
 
 ## Contexto
 
-O MVP roda localmente com PostgreSQL, NATS/JetStream e múltiplas instâncias. Liveness indica
-processo vivo; readiness indica snapshot sincronizado. Nenhum secret pode ser versionado.
+O MVP roda com PostgreSQL, NATS/JetStream e múltiplas instâncias. Liveness indica processo vivo;
+readiness indica snapshot sincronizado. Nenhum secret pode ser versionado.
 
 ## Implementado
 
-- Dockerfile multi-stage com imagem final distroless nonroot.
+- Dockerfile multi-stage com imagem distroless nonroot.
 - .dockerignore sem docs, Git ou artefatos.
-- docker-compose.yml com PostgreSQL 17, NATS 2.11 JetStream e app.
-- Healthcheck do PostgreSQL e depends_on condicionado à saúde.
-- DATABASE_URL, NATS_URL, NATS_SUBJECT e NATS_DURABLE documentados.
-- docs/LOCAL-DEVELOPMENT.md com execução e validação.
-- Compose exige POSTGRES_PASSWORD externo, sem senha versionada.
+- Compose com PostgreSQL 17, NATS 2.11 JetStream e app.
+- PostgreSQL com healthcheck e depends_on condicionado à saúde.
+- Configuração por DATABASE_URL, NATS_URL, NATS_SUBJECT e NATS_DURABLE.
+- docs/LOCAL-DEVELOPMENT.md.
+- Métricas Prometheus de avaliações, latência e requests HTTP.
+- Endpoint /metrics e middleware HTTP.
+- Labels limitados a result, method e status; key de flag não é label.
+- POSTGRES_PASSWORD exigida externamente, sem senha versionada.
 
 ## Ainda necessário
 
 - Aplicar migrações automaticamente ou documentar comando operacional completo.
-- Adicionar métricas Prometheus sem labels de alta cardinalidade.
+- Adicionar métricas de revisão, gaps, resync e outbox.
 - Adicionar smoke test com dependências reais.
 - Configurar startup/readiness para sincronização inicial real.
 
@@ -38,7 +41,7 @@ processo vivo; readiness indica snapshot sincronizado. Nenhum secret pode ser ve
 
 ## Aceite
 
-- [ ] Métricas e smoke test implementados.
-- [ ] Migrações aplicáveis no ambiente Compose.
+- [ ] Métricas e smoke test completos.
+- [ ] Migrações aplicáveis no Compose.
 - [ ] Testes reais passam.
 - [ ] Marcar done e mover para docs/history/.

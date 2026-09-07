@@ -9,9 +9,12 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/control"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/httpapi"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/messaging"
+	"github.com/richardnogueira01/feature-flag-mvp/internal/metrics"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/persistence"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/snapshot"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/syncer"
@@ -60,13 +63,15 @@ func main() {
 		log.Println("NATS subscriber disabled; set NATS_URL to enable distribution")
 	}
 
+	applicationMetrics := metrics.New(prometheus.DefaultRegisterer)
 	api := httpapi.NewHandler(service)
 	status := httpapi.NewStatusHandler(syncState)
 	mux := http.NewServeMux()
-	mux.Handle("/v1/flags", api)
+	mux.Handle("/v1/flags", applicationMetrics.Middleware(api))
 	mux.Handle("/healthz", status)
 	mux.Handle("/readyz", status)
 	mux.Handle("/internal/status", status)
+	mux.Handle("/metrics", promhttp.Handler())
 	log.Println("feature-flag-mvp listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", mux))
 }
