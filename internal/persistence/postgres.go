@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/snapshot"
@@ -13,127 +12,115 @@ import (
 type Flag struct {
 	Key      string
 	Enabled  bool
+	Value    json.RawMessage
 	Revision uint64
 }
 type Store struct{ pool *pgxpool.Pool }
 
-func NewStore(pool *pgxpool.Pool) *Store { return &Store{pool: pool} }
-
-func (s *Store) Apply(ctx context.Context, key string, enabled bool) (Flag, error) {
-	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return Flag{}, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	var revision uint64
-	if err := tx.QueryRow(ctx, `UPDATE revision_counter SET revision = revision + 1 WHERE id = 1 RETURNING revision`).Scan(&revision); err != nil {
-		return Flag{}, err
-	}
-	var flag Flag
-	if err := tx.QueryRow(ctx, `INSERT INTO feature_flags (key, enabled, revision) VALUES ($1, $2, $3) ON CONFLICT (key) DO UPDATE SET enabled = EXCLUDED.enabled, revision = EXCLUDED.revision, updated_at = now() RETURNING key, enabled, revision`, key, enabled, revision).Scan(&flag.Key, &flag.Enabled, &flag.Revision); err != nil {
-		return Flag{}, err
-	}
-	if err := insertHistoryAndOutbox(ctx, tx, flag, `upsert`); err != nil {
-		return Flag{}, err
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return Flag{}, err
-	}
-	return flag, nil
+func NewStore(p *pgxpool.Pool) *Store { return &Store{pool: p} }
+func (s *Store) Apply(c context.Context, k string, e bool) (Flag, error) {
+	v, _ := json.Marshal(e)
+	return s.ApplyValue(c, k, v)
 }
-
-func (s *Store) Delete(ctx context.Context, key string) error {
-	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
-	if err != nil {
-		return err
+func (s *Store) ApplyValue(c context.Context, k string, v json.RawMessage) (Flag, error) {
+	tx, e := s.pool.BeginTx(c, pgx.TxOptions{})
+	if e != nil {
+		return Flag{}, e
 	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	var revision uint64
-	if err := tx.QueryRow(ctx, `UPDATE revision_counter SET revision = revision + 1 WHERE id = 1 RETURNING revision`).Scan(&revision); err != nil {
-		return err
+	defer func() { _ = tx.Rollback(c) }()
+	var rev uint64
+	if e = tx.QueryRow(c, `UPDATE revision_counter SET revision=revision+1 WHERE id=1 RETURNING revision`).Scan(&rev); e != nil {
+		return Flag{}, e
 	}
-	result, err := tx.Exec(ctx, `DELETE FROM feature_flags WHERE key = $1`, key)
-	if err != nil {
-		return err
+	var enabled bool
+	_ = json.Unmarshal(v, &enabled)
+	var f Flag
+	if e = tx.QueryRow(c, `INSERT INTO feature_flags(key,enabled,value,revision) VALUES($1,$2,$3,$4) ON CONFLICT(key) DO UPDATE SET enabled=EXCLUDED.enabled,value=EXCLUDED.value,revision=EXCLUDED.revision,updated_at=now() RETURNING key,enabled,value,revision`, k, enabled, v, rev).Scan(&f.Key, &f.Enabled, &f.Value, &f.Revision); e != nil {
+		return Flag{}, e
 	}
-	if result.RowsAffected() == 0 {
-		return errors.New(`flag not found`)
+	history, _ := json.Marshal(f)
+	if _, e = tx.Exec(c, `INSERT INTO flag_history(revision,key,operation,payload) VALUES($1,$2,'upsert',$3)`, rev, k, history); e != nil {
+		return Flag{}, e
 	}
-	historyPayload, err := json.Marshal(map[string]any{`key`: key, `revision`: revision})
-	if err != nil {
-		return err
+	payload, e := snapshotPayload(c, tx, rev)
+	if e != nil {
+		return Flag{}, e
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO flag_history (revision, key, operation, payload) VALUES ($1, $2, 'delete', $3)`, revision, key, historyPayload); err != nil {
-		return err
+	if _, e = tx.Exec(c, `INSERT INTO outbox_events(revision,event_type,payload) VALUES($1,'flag.updated',$2)`, rev, payload); e != nil {
+		return Flag{}, e
 	}
-	eventPayload, err := snapshotPayload(ctx, tx, revision)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx, `INSERT INTO outbox_events (revision, event_type, payload) VALUES ($1, 'flag.deleted', $2)`, revision, eventPayload); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	e = tx.Commit(c)
+	return f, e
 }
-
-func insertHistoryAndOutbox(ctx context.Context, tx pgx.Tx, flag Flag, operation string) error {
-	historyPayload, err := json.Marshal(flag)
-	if err != nil {
-		return err
+func (s *Store) Delete(c context.Context, k string) error {
+	tx, e := s.pool.BeginTx(c, pgx.TxOptions{})
+	if e != nil {
+		return e
 	}
-	if _, err := tx.Exec(ctx, `INSERT INTO flag_history (revision, key, operation, payload) VALUES ($1, $2, $3, $4)`, flag.Revision, flag.Key, operation, historyPayload); err != nil {
-		return err
+	defer func() { _ = tx.Rollback(c) }()
+	var rev uint64
+	if e = tx.QueryRow(c, `UPDATE revision_counter SET revision=revision+1 WHERE id=1 RETURNING revision`).Scan(&rev); e != nil {
+		return e
 	}
-	eventPayload, err := snapshotPayload(ctx, tx, flag.Revision)
-	if err != nil {
-		return err
+	r, e := tx.Exec(c, `DELETE FROM feature_flags WHERE key=$1`, k)
+	if e != nil {
+		return e
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO outbox_events (revision, event_type, payload) VALUES ($1, 'flag.updated', $2)`, flag.Revision, eventPayload)
-	return err
+	if r.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	p, _ := json.Marshal(map[string]any{"key": k, "revision": rev})
+	if _, e = tx.Exec(c, `INSERT INTO flag_history(revision,key,operation,payload) VALUES($1,$2,'delete',$3)`, rev, k, p); e != nil {
+		return e
+	}
+	sp, e := snapshotPayload(c, tx, rev)
+	if e != nil {
+		return e
+	}
+	if _, e = tx.Exec(c, `INSERT INTO outbox_events(revision,event_type,payload) VALUES($1,'flag.deleted',$2)`, rev, sp); e != nil {
+		return e
+	}
+	return tx.Commit(c)
 }
-
-func snapshotPayload(ctx context.Context, tx pgx.Tx, revision uint64) ([]byte, error) {
-	rows, err := tx.Query(ctx, `SELECT key, enabled FROM feature_flags ORDER BY key`)
-	if err != nil {
-		return nil, err
+func snapshotPayload(c context.Context, tx pgx.Tx, rev uint64) ([]byte, error) {
+	rows, e := tx.Query(c, `SELECT key,enabled,value FROM feature_flags ORDER BY key`)
+	if e != nil {
+		return nil, e
 	}
 	defer rows.Close()
-	flags := make(map[string]snapshot.Flag)
+	m := map[string]snapshot.Flag{}
 	for rows.Next() {
-		var key string
-		var enabled bool
-		if err := rows.Scan(&key, &enabled); err != nil {
-			return nil, err
+		var k string
+		var en bool
+		var v []byte
+		if e = rows.Scan(&k, &en, &v); e != nil {
+			return nil, e
 		}
-		flags[key] = snapshot.Flag{Key: key, Enabled: enabled}
+		m[k] = snapshot.Flag{Key: k, Enabled: en, Value: v}
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return json.Marshal(snapshot.Snapshot{Revision: revision, Flags: flags})
+	return json.Marshal(snapshot.Snapshot{Revision: rev, Flags: m})
 }
-
-func (s *Store) Snapshot(ctx context.Context) (*snapshot.Snapshot, error) {
-	var revision uint64
-	if err := s.pool.QueryRow(ctx, `SELECT revision FROM revision_counter WHERE id = 1`).Scan(&revision); err != nil {
-		return nil, err
+func (s *Store) Snapshot(c context.Context) (*snapshot.Snapshot, error) {
+	var rev uint64
+	if e := s.pool.QueryRow(c, `SELECT revision FROM revision_counter WHERE id=1`).Scan(&rev); e != nil {
+		return nil, e
 	}
-	rows, err := s.pool.Query(ctx, `SELECT key, enabled FROM feature_flags ORDER BY key`)
-	if err != nil {
-		return nil, err
+	rows, e := s.pool.Query(c, `SELECT key,enabled,value FROM feature_flags ORDER BY key`)
+	if e != nil {
+		return nil, e
 	}
 	defer rows.Close()
-	flags := make(map[string]snapshot.Flag)
+	m := map[string]snapshot.Flag{}
 	for rows.Next() {
-		var key string
-		var enabled bool
-		if err := rows.Scan(&key, &enabled); err != nil {
-			return nil, err
+		var k string
+		var en bool
+		var v []byte
+		if e = rows.Scan(&k, &en, &v); e != nil {
+			return nil, e
 		}
-		flags[key] = snapshot.Flag{Key: key, Enabled: enabled}
+		m[k] = snapshot.Flag{Key: k, Enabled: en, Value: v}
 	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return &snapshot.Snapshot{Revision: revision, Flags: flags}, nil
+	return &snapshot.Snapshot{Revision: rev, Flags: m}, rows.Err()
 }
+
+var _ = errors.New

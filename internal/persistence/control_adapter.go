@@ -2,56 +2,44 @@ package persistence
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-
 	"github.com/richardnogueira01/feature-flag-mvp/internal/control"
 )
 
-type ControlAdapter struct {
-	store *Store
-}
+type ControlAdapter struct{ store *Store }
 
-func NewControlAdapter(store *Store) *ControlAdapter {
-	return &ControlAdapter{store: store}
+func NewControlAdapter(s *Store) *ControlAdapter { return &ControlAdapter{store: s} }
+func (a *ControlAdapter) Apply(c context.Context, k string, e bool) (control.Flag, error) {
+	v, _ := json.Marshal(e)
+	return a.ApplyValue(c, k, v)
 }
-
-func (a *ControlAdapter) Apply(ctx context.Context, key string, enabled bool) (control.Flag, error) {
-	flag, err := a.store.Apply(ctx, key, enabled)
-	if err != nil {
-		return control.Flag{}, err
-	}
-	return control.Flag{Key: flag.Key, Enabled: flag.Enabled, Revision: flag.Revision}, nil
+func (a *ControlAdapter) ApplyValue(c context.Context, k string, v json.RawMessage) (control.Flag, error) {
+	f, e := a.store.ApplyValue(c, k, v)
+	return control.Flag{Key: f.Key, Enabled: f.Enabled, Value: f.Value, Revision: f.Revision}, e
 }
-
-func (a *ControlAdapter) Delete(ctx context.Context, key string) error {
-	err := a.store.Delete(ctx, key)
-	if errors.Is(err, ErrNotFound) {
+func (a *ControlAdapter) Delete(c context.Context, k string) error {
+	e := a.store.Delete(c, k)
+	if errors.Is(e, ErrNotFound) {
 		return control.ErrNotFound
 	}
-	return err
+	return e
 }
-
-func (a *ControlAdapter) Get(ctx context.Context, key string) (control.Flag, error) {
-	flag, err := a.store.Get(ctx, key)
-	if errors.Is(err, ErrNotFound) {
+func (a *ControlAdapter) Get(c context.Context, k string) (control.Flag, error) {
+	f, e := a.store.Get(c, k)
+	if errors.Is(e, ErrNotFound) {
 		return control.Flag{}, control.ErrNotFound
 	}
-	if err != nil {
-		return control.Flag{}, err
-	}
-	return control.Flag{Key: flag.Key, Enabled: flag.Enabled, Revision: flag.Revision}, nil
+	return control.Flag{Key: f.Key, Enabled: f.Enabled, Value: f.Value, Revision: f.Revision}, e
 }
-
-func (a *ControlAdapter) List(ctx context.Context) ([]control.Flag, error) {
-	flags, err := a.store.List(ctx)
-	if err != nil {
-		return nil, err
+func (a *ControlAdapter) List(c context.Context) ([]control.Flag, error) {
+	fs, e := a.store.List(c)
+	if e != nil {
+		return nil, e
 	}
-	result := make([]control.Flag, len(flags))
-	for i, flag := range flags {
-		result[i] = control.Flag{Key: flag.Key, Enabled: flag.Enabled, Revision: flag.Revision}
+	out := make([]control.Flag, len(fs))
+	for i, f := range fs {
+		out[i] = control.Flag{Key: f.Key, Enabled: f.Enabled, Value: f.Value, Revision: f.Revision}
 	}
-	return result, nil
+	return out, nil
 }
-
-var _ control.Repository = (*ControlAdapter)(nil)

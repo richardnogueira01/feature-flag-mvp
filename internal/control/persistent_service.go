@@ -2,7 +2,7 @@ package control
 
 import (
 	"context"
-
+	"encoding/json"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/snapshot"
 )
 
@@ -11,83 +11,84 @@ type PersistentService struct {
 	data *snapshot.Store
 }
 
-func NewPersistentService(repo Repository, data *snapshot.Store) *PersistentService {
-	return &PersistentService{repo: repo, data: data}
+func NewPersistentService(r Repository, d *snapshot.Store) *PersistentService {
+	return &PersistentService{repo: r, data: d}
 }
-
-func (s *PersistentService) Create(key string, enabled bool) (Flag, error) {
-	if err := validateKey(key); err != nil {
+func (s *PersistentService) Create(k string, e bool) (Flag, error) {
+	v, _ := json.Marshal(e)
+	return s.CreateValue(k, v)
+}
+func (s *PersistentService) Update(k string, e bool) (Flag, error) {
+	v, _ := json.Marshal(e)
+	return s.UpdateValue(k, v)
+}
+func (s *PersistentService) CreateValue(k string, v json.RawMessage) (Flag, error) {
+	if err := validateKey(k); err != nil {
 		return Flag{}, err
 	}
-	if _, err := s.repo.Get(context.Background(), key); err == nil {
+	if err := validateValue(v); err != nil {
+		return Flag{}, err
+	}
+	if _, e := s.repo.Get(context.Background(), k); e == nil {
 		return Flag{}, ErrExists
-	} else if err != ErrNotFound {
-		return Flag{}, err
+	} else if e != ErrNotFound {
+		return Flag{}, e
 	}
-	flag, err := s.repo.Apply(context.Background(), key, enabled)
-	if err != nil {
-		return Flag{}, err
+	f, e := s.repo.ApplyValue(context.Background(), k, v)
+	if e == nil {
+		s.refreshSnapshot()
 	}
-	s.refreshSnapshot()
-	return flag, nil
+	return f, e
 }
-
-func (s *PersistentService) Update(key string, enabled bool) (Flag, error) {
-	if err := validateKey(key); err != nil {
+func (s *PersistentService) UpdateValue(k string, v json.RawMessage) (Flag, error) {
+	if err := validateKey(k); err != nil {
 		return Flag{}, err
 	}
-	if _, err := s.repo.Get(context.Background(), key); err != nil {
-		if err == ErrNotFound {
-			return Flag{}, ErrNotFound
-		}
+	if err := validateValue(v); err != nil {
 		return Flag{}, err
 	}
-	flag, err := s.repo.Apply(context.Background(), key, enabled)
-	if err != nil {
-		return Flag{}, err
+	if _, e := s.repo.Get(context.Background(), k); e != nil {
+		return Flag{}, e
 	}
-	s.refreshSnapshot()
-	return flag, nil
-}
-
-func (s *PersistentService) Delete(key string) error {
-	if err := validateKey(key); err != nil {
-		return err
+	f, e := s.repo.ApplyValue(context.Background(), k, v)
+	if e == nil {
+		s.refreshSnapshot()
 	}
-	if err := s.repo.Delete(context.Background(), key); err != nil {
-		return err
+	return f, e
+}
+func (s *PersistentService) Delete(k string) error {
+	if e := validateKey(k); e != nil {
+		return e
 	}
-	s.refreshSnapshot()
-	return nil
+	e := s.repo.Delete(context.Background(), k)
+	if e == nil {
+		s.refreshSnapshot()
+	}
+	return e
 }
-
-func (s *PersistentService) Get(key string) (Flag, error) {
-	return s.repo.Get(context.Background(), key)
-}
-
+func (s *PersistentService) Get(k string) (Flag, error) { return s.repo.Get(context.Background(), k) }
 func (s *PersistentService) List() []Flag {
-	flags, err := s.repo.List(context.Background())
-	if err != nil {
+	f, e := s.repo.List(context.Background())
+	if e != nil {
 		return nil
 	}
-	return flags
+	return f
 }
-
 func (s *PersistentService) refreshSnapshot() {
 	if s.data == nil {
 		return
 	}
-	flags, err := s.repo.List(context.Background())
-	if err != nil || len(flags) == 0 {
+	fs, e := s.repo.List(context.Background())
+	if e != nil {
 		return
 	}
-	snapshotFlags := make(map[string]snapshot.Flag, len(flags))
-	var revision uint64
-	for _, flag := range flags {
-		snapshotFlags[flag.Key] = snapshot.Flag{Key: flag.Key, Enabled: flag.Enabled}
-		if flag.Revision > revision {
-			revision = flag.Revision
+	m := make(map[string]snapshot.Flag, len(fs))
+	var rev uint64
+	for _, f := range fs {
+		m[f.Key] = snapshot.Flag{Key: f.Key, Enabled: f.Enabled, Value: f.Value}
+		if f.Revision > rev {
+			rev = f.Revision
 		}
 	}
-	s.data.Publish(&snapshot.Snapshot{Revision: revision, Flags: snapshotFlags})
+	s.data.Publish(&snapshot.Snapshot{Revision: rev, Flags: m})
 }

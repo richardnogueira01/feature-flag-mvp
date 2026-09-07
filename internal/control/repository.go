@@ -1,11 +1,13 @@
 package control
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
-// Repository is the persistence port required by the control plane.
-// Implementations must keep mutation and outbox insertion in one transaction.
 type Repository interface {
 	Apply(context.Context, string, bool) (Flag, error)
+	ApplyValue(context.Context, string, json.RawMessage) (Flag, error)
 	Delete(context.Context, string) error
 	Get(context.Context, string) (Flag, error)
 	List(context.Context) ([]Flag, error)
