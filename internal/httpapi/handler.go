@@ -79,8 +79,33 @@ func (h *Handler) collection(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 405, "method not allowed")
 	}
 }
+func (h *Handler) patch(w http.ResponseWriter, r *http.Request, key string) {
+	var input struct {
+		Enabled *bool `json:"enabled"`
+	}
+	if !decodeJSON(w, r, &input) || input.Enabled == nil {
+		writeError(w, http.StatusBadRequest, "enabled is required")
+		return
+	}
+	toggler, ok := h.service.(interface {
+		SetEnabled(string, bool) (control.Flag, error)
+	})
+	if !ok {
+		writeError(w, http.StatusNotImplemented, "toggle is not supported")
+		return
+	}
+	flag, err := toggler.SetEnabled(key, *input.Enabled)
+	if err != nil {
+		h.writeServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, flag)
+}
 func (h *Handler) item(w http.ResponseWriter, r *http.Request, key string) {
 	switch r.Method {
+	case http.MethodPatch:
+		h.patch(w, r, key)
+		return
 	case http.MethodGet:
 		f, e := h.service.Get(key)
 		if e != nil {
