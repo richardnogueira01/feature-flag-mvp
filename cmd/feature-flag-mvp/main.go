@@ -91,7 +91,9 @@ func main() {
 	}
 	applicationMetrics := appmetrics.New(prometheus.DefaultRegisterer)
 	mux := http.NewServeMux()
-	mux.Handle("/v1/flags", applicationMetrics.Middleware(httpapi.NewHandler(service)))
+	flagsHandler := applicationMetrics.Middleware(httpapi.NewHandler(service))
+	mux.Handle("/v1/flags", flagsHandler)
+	mux.Handle("/v1/flags/", flagsHandler)
 	mux.Handle("/v1/evaluate/", httpapi.NewEvaluateHandler(data, applicationMetrics.ObserveEvaluation))
 	status := httpapi.NewStatusHandler(syncState)
 	mux.Handle("/healthz", status)
