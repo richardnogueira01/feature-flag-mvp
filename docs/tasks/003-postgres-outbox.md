@@ -8,38 +8,38 @@
 
 ## Contexto
 
-PostgreSQL é a fonte de verdade. Cada alteração deve persistir estado, histórico auditável e
-evento de distribuição na mesma transação. Publicação posterior pode falhar, mas o evento não pode
-ser perdido; o worker usa Transactional Outbox.
+PostgreSQL é a fonte de verdade. Estado, histórico e evento de distribuição devem ser gravados na
+mesma transação. O Data Plane não pode consultar PostgreSQL durante Evaluate.
 
-## Objetivo
+## Implementado
 
-Trocar o armazenamento temporário por PostgreSQL sem colocar banco em Evaluate.
-
-## Implementado nesta etapa
-
-- Dependência pgx v5 e pgxpool.
-- Adapter internal/persistence com Apply e Delete transacionais.
+- pgx v5 e pgxpool em go.mod/go.sum.
+- internal/persistence com Apply e Delete transacionais.
+- migrations/000001_initial.up.sql e down.sql.
 - Tabelas revision_counter, feature_flags, flag_history e outbox_events.
-- Migrações migrations/000001_initial.up.sql e down.sql.
-- Histórico e outbox são gravados junto da alteração.
+- internal/persistence/outbox.go com ClaimPending usando FOR UPDATE SKIP LOCKED.
+- Incremento de attempts durante claim.
+- Publisher injetável, Worker.RunOnce e Worker.Run.
+- MarkPublished só marca eventos ainda não publicados.
 
 ## Ainda necessário
 
-- Integrar o Control Plane HTTP ao adapter por uma interface de persistência.
-- Implementar worker que busca eventos pendentes, publica idempotentemente e marca published_at.
-- Adicionar testes de integração com PostgreSQL real e testar rollback/retry.
+- Adaptar control.Service para uma interface de persistência e usar o PostgreSQL em produção.
+- Implementar o publisher NATS na task 004.
+- Criar testes de integração com PostgreSQL real para commit, rollback, concorrência e retry.
+- Validar que erros do worker sejam observáveis sem perder eventos.
 
 ## Aceite
 
-- [ ] Mutação e evento confirmados na mesma transação.
-- [ ] Rollback não altera estado, histórico nem outbox.
+- [ ] Control Plane usa repository PostgreSQL.
+- [ ] Mutação, histórico e outbox confirmam na mesma transação.
+- [ ] Rollback não deixa registros parciais.
 - [ ] Retry não duplica efeito lógico.
 - [ ] Testes de integração passam.
 - [ ] go test ./..., go test -race ./... e go vet ./... passam.
-- [ ] Só então marcar done e mover esta spec para docs/history/.
+- [ ] Marcar done e mover para docs/history/.
 
-## Execução
+## Evidências atuais
 
 - go get github.com/jackc/pgx/v5/pgxpool@v5.7.6: OK
 - gofmt -w internal: OK
