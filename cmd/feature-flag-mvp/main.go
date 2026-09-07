@@ -12,6 +12,7 @@ import (
 	"github.com/richardnogueira01/feature-flag-mvp/internal/httpapi"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/persistence"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/snapshot"
+	"github.com/richardnogueira01/feature-flag-mvp/internal/syncer"
 )
 
 func main() {
@@ -29,16 +30,20 @@ func main() {
 			log.Fatal(err)
 		}
 		defer pool.Close()
-		service = control.NewPersistentService(
-			persistence.NewControlAdapter(persistence.NewStore(pool)),
-			data,
-		)
+		service = control.NewPersistentService(persistence.NewControlAdapter(persistence.NewStore(pool)), data)
 		log.Println("using PostgreSQL control plane")
 	} else {
 		service = control.NewService(data)
 		log.Println("using in-memory control plane; set DATABASE_URL for PostgreSQL")
 	}
 
+	syncState := syncer.New(data, nil)
+	mux := http.NewServeMux()
+	mux.Handle("/v1/flags", httpapi.NewHandler(service))
+	status := httpapi.NewStatusHandler(syncState)
+	mux.Handle("/healthz", status)
+	mux.Handle("/readyz", status)
+	mux.Handle("/internal/status", status)
 	log.Println("feature-flag-mvp listening on :8080")
-	log.Fatal(http.ListenAndServe(":8080", httpapi.NewHandler(service)))
+	log.Fatal(http.ListenAndServe(":8080", mux))
 }
