@@ -3,20 +3,17 @@ package syncer
 import (
 	"context"
 	"errors"
-	"sync"
-
 	"github.com/richardnogueira01/feature-flag-mvp/internal/snapshot"
+	"sync"
 )
 
 var ErrRevisionGap = errors.New("snapshot revision gap")
 
 type Fetcher func(context.Context) (*snapshot.Snapshot, error)
-
 type Observer interface {
 	ObserveGap()
 	ObserveResync(bool)
 }
-
 type Syncer struct {
 	mu           sync.Mutex
 	store        *snapshot.Store
@@ -26,14 +23,21 @@ type Syncer struct {
 	resyncing    bool
 }
 
-func New(store *snapshot.Store, fetch Fetcher) *Syncer {
-	return NewWithObserver(store, fetch, nil)
-}
-
+func New(store *snapshot.Store, fetch Fetcher) *Syncer { return NewWithObserver(store, fetch, nil) }
 func NewWithObserver(store *snapshot.Store, fetch Fetcher, observer Observer) *Syncer {
 	return &Syncer{store: store, fetch: fetch, observer: observer}
 }
 
+func (s *Syncer) Initialize(next *snapshot.Snapshot) error {
+	if next == nil {
+		return errors.New("snapshot is nil")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.store.Publish(next)
+	s.synchronized = true
+	return nil
+}
 func (s *Syncer) Apply(ctx context.Context, next *snapshot.Snapshot) error {
 	if next == nil {
 		return errors.New("snapshot is nil")
@@ -56,11 +60,7 @@ func (s *Syncer) Apply(ctx context.Context, next *snapshot.Snapshot) error {
 	s.mu.Unlock()
 	return nil
 }
-
-func (s *Syncer) Resync(ctx context.Context) error {
-	return s.resync(ctx)
-}
-
+func (s *Syncer) Resync(ctx context.Context) error { return s.resync(ctx) }
 func (s *Syncer) resync(ctx context.Context) error {
 	s.mu.Lock()
 	if s.resyncing {
@@ -95,9 +95,4 @@ func (s *Syncer) resync(ctx context.Context) error {
 	success = true
 	return nil
 }
-
-func (s *Syncer) Ready() bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.synchronized && s.store.Revision() > 0
-}
+func (s *Syncer) Ready() bool { s.mu.Lock(); defer s.mu.Unlock(); return s.synchronized }

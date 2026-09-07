@@ -5,32 +5,25 @@ services:
       POSTGRES_DB: feature_flags
       POSTGRES_USER: feature_flags
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the environment}
-    ports:
-      - "5432:5432"
+    ports: ["5432:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U feature_flags -d feature_flags"]
       interval: 5s
       timeout: 3s
       retries: 10
-
   nats:
     image: nats:2.11-alpine
     command: ["-js"]
-    ports:
-      - "4222:4222"
-      - "8222:8222"
-
+    ports: ["4222:4222", "8222:8222"]
   app:
     build: .
     environment:
       DATABASE_URL: postgres://feature_flags:${POSTGRES_PASSWORD}@postgres:5432/feature_flags?sslmode=disable
+      AUTO_MIGRATE: "true"
       NATS_URL: nats://nats:4222
       NATS_SUBJECT: feature-flags.events
       NATS_DURABLE: feature-flag-mvp
-    ports:
-      - "8080:8080"
+    ports: ["8080:8080"]
     depends_on:
-      postgres:
-        condition: service_healthy
-      nats:
-        condition: service_started
+      postgres: { condition: service_healthy }
+      nats: { condition: service_started }
