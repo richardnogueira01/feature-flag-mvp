@@ -102,7 +102,7 @@ func main() {
 	mux.Handle("/swagger", swagger)
 	mux.Handle("/swagger/", swagger)
 	mux.Handle("/test/large-payload", httpapi.LargePayloadTestHandler())
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	log.Fatal(http.ListenAndServe(":8080", httpapi.Gzip(mux)))
 }
 func getenv(k, f string) string {
 	if v := os.Getenv(k); v != "" {
