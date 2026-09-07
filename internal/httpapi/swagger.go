@@ -14,7 +14,7 @@ paths:
     get: {responses: {'200': {description: Lista}}}
   /v1/flags/{key}:
     parameters: [{name: key, in: path, required: true, schema: {type: string}, example: timeout_ms}]
-    get: {responses: {'200': {description: Encontrada}, '404': {description: Inexistente}}}
+    get: {responses: {'200': {description: Encontrada}, '404': {description: Inexistente}}
     put:
       requestBody: {required: true, content: {application/json: {schema: {$ref: '#/components/schemas/ValueRequest'}, example: {value: {retries: 3}}}}}
       responses: {'200': {description: Atualizada}}
@@ -22,7 +22,7 @@ paths:
     patch:
       summary: Ativa ou desativa uma flag sem alterar seu value
       requestBody: {required: true, content: {application/json: {schema: {type: object, required: [enabled], properties: {enabled: {type: boolean}}}, example: {enabled: false}}}}
-      responses: {'200': {description: Estado atualizado}, '400': {description: enabled obrigatório}, '404': {description: Inexistente}}}
+      responses: {'200': {description: Estado atualizado}, '400': {description: enabled obrigatório}, '404': {description: Inexistente}}
   /v1/evaluate/{key}:
     get:
       parameters: [{name: key, in: path, required: true, schema: {type: string}}]
