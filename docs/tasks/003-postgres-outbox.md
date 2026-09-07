@@ -2,33 +2,48 @@
 
 - Projeto: feature-flag-mvp
 - Tipo: feature
-- Status: planned
-- Branch: task/feature-flag-mvp-postgres-outbox
+- Status: in-progress
+- Branch: task/feature-flag-mvp-mvp
 - Dependências: 002-control-plane-api
 
 ## Contexto
 
-PostgreSQL é a fonte de verdade. Cada alteração deve persistir estado, histórico e evento de
-distribuição na mesma transação. Publicação posterior pode falhar, mas o evento não pode ser perdido.
+PostgreSQL é a fonte de verdade. Cada alteração deve persistir estado, histórico auditável e
+evento de distribuição na mesma transação. Publicação posterior pode falhar, mas o evento não pode
+ser perdido; o worker usa Transactional Outbox.
 
 ## Objetivo
 
-Trocar o armazenamento temporário por PostgreSQL sem alterar HTTP nem colocar banco em Evaluate.
+Trocar o armazenamento temporário por PostgreSQL sem colocar banco em Evaluate.
 
-## Implementação
+## Implementado nesta etapa
 
-- Criar migrações para feature_flags, flag_history e outbox_events.
-- Usar pgx e ports/adapters.
-- feature_flags: key única, enabled, revision, created_at e updated_at.
-- flag_history: revision, key, operation, payload e timestamp.
-- outbox_events: id, revision, event_type, payload, published_at e attempts.
-- Na transação, atualizar revisão, salvar histórico e inserir outbox.
-- Worker busca pendentes, publica idempotentemente e marca sucesso; falha mantém retry.
+- Dependência pgx v5 e pgxpool.
+- Adapter internal/persistence com Apply e Delete transacionais.
+- Tabelas revision_counter, feature_flags, flag_history e outbox_events.
+- Migrações migrations/000001_initial.up.sql e down.sql.
+- Histórico e outbox são gravados junto da alteração.
 
-## Testes e aceite
+## Ainda necessário
 
-- [ ] Testes com PostgreSQL real.
+- Integrar o Control Plane HTTP ao adapter por uma interface de persistência.
+- Implementar worker que busca eventos pendentes, publica idempotentemente e marca published_at.
+- Adicionar testes de integração com PostgreSQL real e testar rollback/retry.
+
+## Aceite
+
+- [ ] Mutação e evento confirmados na mesma transação.
 - [ ] Rollback não altera estado, histórico nem outbox.
 - [ ] Retry não duplica efeito lógico.
-- [ ] Passar go test ./..., go test -race ./... e go vet ./....
-- [ ] Registrar migrações e comandos, marcar done e mover para docs/history/.
+- [ ] Testes de integração passam.
+- [ ] go test ./..., go test -race ./... e go vet ./... passam.
+- [ ] Só então marcar done e mover esta spec para docs/history/.
+
+## Execução
+
+- go get github.com/jackc/pgx/v5/pgxpool@v5.7.6: OK
+- gofmt -w internal: OK
+- go test ./...: OK
+- go vet ./...: OK
+- go build ./...: OK
+- git diff --check: OK
