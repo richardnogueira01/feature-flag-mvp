@@ -8,6 +8,7 @@ const flagKey = __ENV.FLAG_KEY || 'menu_itau_mobile';
 const errors = new Rate('evaluate_errors');
 
 export const options = {
+  gracefulStop: __ENV.GRACEFUL_STOP || '5s',
   scenarios: {
     evaluate: {
       executor: 'constant-arrival-rate',
