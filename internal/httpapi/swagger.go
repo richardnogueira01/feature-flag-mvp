@@ -6,17 +6,95 @@ const openAPISpec = `openapi: 3.0.3
 info:
   title: Feature Flag MVP API
   version: 0.1.0
+servers:
+  - url: http://localhost:8080
 paths:
   /v1/flags:
-    get: {responses: {'200': {description: Lista de flags}}}
-    post: {responses: {'201': {description: Flag criada}, '400': {description: Inválido}, '409': {description: Conflito}}}
+    get:
+      summary: Lista todas as flags
+      responses:
+        '200': {description: Lista de flags}
+    post:
+      summary: Cria uma flag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFlagRequest'
+            example: {key: checkout, enabled: true}
+      responses:
+        '201': {description: Flag criada}
+        '400': {description: JSON ou key inválida}
+        '409': {description: Flag já existe}
   /v1/flags/{key}:
-    get: {responses: {'200': {description: Flag}, '404': {description: Não encontrado}}}
-    put: {responses: {'200': {description: Atualizada}, '404': {description: Não encontrado}}}
-    delete: {responses: {'204': {description: Removida}, '404': {description: Não encontrado}}}
-  /v1/evaluate/{key}: {get: {responses: {'200': {description: Resultado}, '404': {description: Não encontrado}}}}
-  /healthz: {get: {responses: {'200': {description: UP}}}}
-  /readyz: {get: {responses: {'200': {description: READY}, '503': {description: NOT_READY}}}}
+    parameters:
+      - name: key
+        in: path
+        required: true
+        description: Identificador da flag
+        schema: {type: string, minLength: 1, maxLength: 128}
+        example: checkout
+    get:
+      summary: Consulta uma flag
+      responses:
+        '200': {description: Flag encontrada}
+        '404': {description: Flag não encontrada}
+    put:
+      summary: Atualiza uma flag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/UpdateFlagRequest'}
+            example: {enabled: false}
+      responses:
+        '200': {description: Flag atualizada}
+        '400': {description: JSON ou key inválida}
+        '404': {description: Flag não encontrada}
+    delete:
+      summary: Remove uma flag
+      responses:
+        '204': {description: Flag removida}
+        '404': {description: Flag não encontrada}
+  /v1/evaluate/{key}:
+    get:
+      summary: Avalia uma flag no snapshot local
+      parameters:
+        - name: key
+          in: path
+          required: true
+          description: Identificador da flag a avaliar
+          schema: {type: string, minLength: 1}
+          example: checkout
+      responses:
+        '200': {description: Resultado da avaliação}
+        '404': {description: Flag não encontrada}
+  /healthz:
+    get: {summary: Liveness, responses: {'200': {description: Serviço ativo}}}
+  /readyz:
+    get: {summary: Readiness, responses: {'200': {description: Snapshot sincronizado}, '503': {description: Ainda não sincronizado}}}
+  /internal/status:
+    get: {summary: Status operacional, responses: {'200': {description: Status}}}
+components:
+  schemas:
+    CreateFlagRequest:
+      type: object
+      required: [key, enabled]
+      properties:
+        key: {type: string, minLength: 1, maxLength: 128}
+        enabled: {type: boolean}
+    UpdateFlagRequest:
+      type: object
+      required: [enabled]
+      properties:
+        enabled: {type: boolean}
+    Flag:
+      type: object
+      properties:
+        Key: {type: string}
+        Enabled: {type: boolean}
+        Revision: {type: integer, format: int64}
 `
 
 func OpenAPISpecHandler() http.Handler {
