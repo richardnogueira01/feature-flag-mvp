@@ -8,40 +8,38 @@
 
 ## Contexto
 
-PostgreSQL é a fonte de verdade. Estado, histórico e evento de distribuição devem ser gravados na
-mesma transação. O Data Plane não pode consultar PostgreSQL durante Evaluate.
+PostgreSQL é a fonte de verdade. Estado, histórico e evento devem ser gravados na mesma transação.
+O Data Plane não consulta PostgreSQL durante Evaluate.
 
 ## Implementado
 
-- pgx v5 e pgxpool em go.mod/go.sum.
-- internal/persistence com Apply e Delete transacionais.
-- migrations/000001_initial.up.sql e down.sql.
-- Tabelas revision_counter, feature_flags, flag_history e outbox_events.
-- internal/persistence/outbox.go com ClaimPending usando FOR UPDATE SKIP LOCKED.
-- Incremento de attempts durante claim.
-- Publisher injetável, Worker.RunOnce e Worker.Run.
-- MarkPublished só marca eventos ainda não publicados.
+- pgx v5 e pgxpool.
+- Store PostgreSQL com Apply, Delete, Get e List.
+- Migrações para revision_counter, feature_flags, flag_history e outbox_events.
+- Worker com claim FOR UPDATE SKIP LOCKED, tentativas e MarkPublished.
+- Porta control.Repository e ControlAdapter.
+- PersistentService no Control Plane.
+- Handler HTTP aceita serviço em memória ou persistente.
+- main usa PostgreSQL quando DATABASE_URL existe e fallback explícito em memória.
 
 ## Ainda necessário
 
-- Adaptar control.Service para uma interface de persistência e usar o PostgreSQL em produção.
-- Implementar o publisher NATS na task 004.
-- Criar testes de integração com PostgreSQL real para commit, rollback, concorrência e retry.
-- Validar que erros do worker sejam observáveis sem perder eventos.
+- Executar migrações automaticamente ou documentar comando operacional.
+- Implementar publisher NATS na task 004.
+- Adicionar testes com PostgreSQL real para commit, rollback, concorrência e retry.
+- Propagar e observar falhas do worker sem perder eventos.
+- Revisar a semântica de criação concorrente no adapter.
 
 ## Aceite
 
-- [ ] Control Plane usa repository PostgreSQL.
-- [ ] Mutação, histórico e outbox confirmam na mesma transação.
+- [ ] Testes de integração PostgreSQL passam.
 - [ ] Rollback não deixa registros parciais.
 - [ ] Retry não duplica efeito lógico.
-- [ ] Testes de integração passam.
 - [ ] go test ./..., go test -race ./... e go vet ./... passam.
 - [ ] Marcar done e mover para docs/history/.
 
-## Evidências atuais
+## Evidências
 
-- go get github.com/jackc/pgx/v5/pgxpool@v5.7.6: OK
 - gofmt -w internal: OK
 - go test ./...: OK
 - go vet ./...: OK

@@ -9,11 +9,19 @@ import (
 	"github.com/richardnogueira01/feature-flag-mvp/internal/control"
 )
 
-type Handler struct {
-	service *control.Service
+type Service interface {
+	Create(string, bool) (control.Flag, error)
+	Update(string, bool) (control.Flag, error)
+	Delete(string) error
+	Get(string) (control.Flag, error)
+	List() []control.Flag
 }
 
-func NewHandler(service *control.Service) http.Handler {
+type Handler struct {
+	service Service
+}
+
+func NewHandler(service Service) http.Handler {
 	return &Handler{service: service}
 }
 
