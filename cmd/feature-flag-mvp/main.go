@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/nats-io/nats.go"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/control"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/httpapi"
+	"github.com/richardnogueira01/feature-flag-mvp/internal/messaging"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/persistence"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/snapshot"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/syncer"
@@ -38,12 +40,40 @@ func main() {
 	}
 
 	syncState := syncer.New(data, nil)
-	mux := http.NewServeMux()
-	mux.Handle("/v1/flags", httpapi.NewHandler(service))
+	if natsURL := os.Getenv("NATS_URL"); natsURL != "" {
+		conn, err := nats.Connect(natsURL)
+		if err != nil {
+			log.Fatal(err)
+		}
+		defer conn.Drain()
+		stream, err := conn.JetStream()
+		if err != nil {
+			log.Fatal(err)
+		}
+		subject := getenv("NATS_SUBJECT", "feature-flags.events")
+		durable := getenv("NATS_DURABLE", "feature-flag-mvp")
+		if _, err := messaging.NewSubscriber(stream).Subscribe(subject, durable, syncState.Apply); err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("subscribed to NATS subject %s with durable %s", subject, durable)
+	} else {
+		log.Println("NATS subscriber disabled; set NATS_URL to enable distribution")
+	}
+
+	api := httpapi.NewHandler(service)
 	status := httpapi.NewStatusHandler(syncState)
+	mux := http.NewServeMux()
+	mux.Handle("/v1/flags", api)
 	mux.Handle("/healthz", status)
 	mux.Handle("/readyz", status)
 	mux.Handle("/internal/status", status)
 	log.Println("feature-flag-mvp listening on :8080")
 	log.Fatal(http.ListenAndServe(":8080", mux))
+}
+
+func getenv(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }
