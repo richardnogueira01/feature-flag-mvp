@@ -16,54 +16,48 @@ type Snapshot struct {
 }
 type Store struct{ current atomic.Pointer[Snapshot] }
 
-func NewStore(initial *Snapshot) *Store {
-	store := &Store{}
-	if initial != nil {
-		store.Publish(initial)
+func NewStore(i *Snapshot) *Store {
+	s := &Store{}
+	if i != nil {
+		s.Publish(i)
 	}
-	return store
+	return s
 }
-func (s *Store) Publish(next *Snapshot) {
-	if next == nil {
+func (s *Store) Publish(n *Snapshot) {
+	if n == nil {
 		return
 	}
-	flags := make(map[string]Flag, len(next.Flags))
-	for key, flag := range next.Flags {
-		flag.Value = append(json.RawMessage(nil), flag.Value...)
-		flags[key] = flag
+	m := make(map[string]Flag, len(n.Flags))
+	for k, f := range n.Flags {
+		f.Value = append(json.RawMessage(nil), f.Value...)
+		m[k] = f
 	}
-	s.current.Store(&Snapshot{Revision: next.Revision, Flags: flags})
+	s.current.Store(&Snapshot{Revision: n.Revision, Flags: m})
 }
-func (s *Store) Evaluate(key string) (bool, bool, uint64) {
-	current := s.current.Load()
-	if current == nil {
+func (s *Store) Evaluate(k string) (bool, bool, uint64) {
+	c := s.current.Load()
+	if c == nil {
 		return false, false, 0
 	}
-	flag, found := current.Flags[key]
-	if len(flag.Value) > 0 {
-		var enabled bool
-		if json.Unmarshal(flag.Value, &enabled) == nil {
-			return enabled, found, current.Revision
-		}
-	}
-	return flag.Enabled, found, current.Revision
+	f, ok := c.Flags[k]
+	return f.Enabled, ok, c.Revision
 }
-func (s *Store) EvaluateValue(key string) (json.RawMessage, bool, uint64) {
-	current := s.current.Load()
-	if current == nil {
+func (s *Store) EvaluateValue(k string) (json.RawMessage, bool, uint64) {
+	c := s.current.Load()
+	if c == nil {
 		return nil, false, 0
 	}
-	flag, found := current.Flags[key]
-	value := append(json.RawMessage(nil), flag.Value...)
-	if len(value) == 0 {
-		value, _ = json.Marshal(flag.Enabled)
+	f, ok := c.Flags[k]
+	v := append(json.RawMessage(nil), f.Value...)
+	if len(v) == 0 {
+		v, _ = json.Marshal(f.Enabled)
 	}
-	return value, found, current.Revision
+	return v, ok, c.Revision
 }
 func (s *Store) Revision() uint64 {
-	current := s.current.Load()
-	if current == nil {
+	c := s.current.Load()
+	if c == nil {
 		return 0
 	}
-	return current.Revision
+	return c.Revision
 }
