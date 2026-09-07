@@ -24,7 +24,6 @@ func (s *Store) ClaimPending(ctx context.Context, limit int) ([]OutboxEvent, err
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-
 	rows, err := tx.Query(ctx, `
 		SELECT id, revision, event_type, payload, attempts
 		FROM outbox_events
@@ -37,7 +36,6 @@ func (s *Store) ClaimPending(ctx context.Context, limit int) ([]OutboxEvent, err
 		return nil, err
 	}
 	defer rows.Close()
-
 	var events []OutboxEvent
 	for rows.Next() {
 		var event OutboxEvent
@@ -69,21 +67,30 @@ type Publisher interface {
 	Publish(context.Context, OutboxEvent) error
 }
 
+type OutboxObserver interface {
+	ObserveOutbox(bool)
+}
+
 type Worker struct {
 	store     *Store
 	publisher Publisher
+	observer  OutboxObserver
 	batch     int
 	interval  time.Duration
 }
 
 func NewWorker(store *Store, publisher Publisher, batch int, interval time.Duration) *Worker {
+	return NewWorkerWithObserver(store, publisher, batch, interval, nil)
+}
+
+func NewWorkerWithObserver(store *Store, publisher Publisher, batch int, interval time.Duration, observer OutboxObserver) *Worker {
 	if batch < 1 {
 		batch = 100
 	}
 	if interval <= 0 {
 		interval = time.Second
 	}
-	return &Worker{store: store, publisher: publisher, batch: batch, interval: interval}
+	return &Worker{store: store, publisher: publisher, observer: observer, batch: batch, interval: interval}
 }
 
 func (w *Worker) RunOnce(ctx context.Context) error {
@@ -93,10 +100,19 @@ func (w *Worker) RunOnce(ctx context.Context) error {
 	}
 	for _, event := range events {
 		if err := w.publisher.Publish(ctx, event); err != nil {
+			if w.observer != nil {
+				w.observer.ObserveOutbox(false)
+			}
 			continue
 		}
 		if err := w.store.MarkPublished(ctx, event.ID); err != nil {
+			if w.observer != nil {
+				w.observer.ObserveOutbox(false)
+			}
 			return err
+		}
+		if w.observer != nil {
+			w.observer.ObserveOutbox(true)
 		}
 	}
 	return nil
