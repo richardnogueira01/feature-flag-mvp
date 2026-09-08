@@ -21,6 +21,7 @@ func main() {
 	go a.Run(ctx, interval)
 	mux := http.NewServeMux()
 	mux.Handle("/v1/evaluate/", httpapi.NewEvaluateHandler(a.Store(), nil))
+	mux.Handle("/test/user-menu", agent.UserMenuHandler())
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
 		if a.Store().Revision() == 0 {
