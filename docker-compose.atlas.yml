@@ -1,0 +1,22 @@
+services:
+  postgres:
+    profiles: ["local"]
+  app:
+    environment:
+      DATABASE_URL: ${ATLAS_FEATURE_FLAGS_DATABASE_URL:?set ATLAS_FEATURE_FLAGS_DATABASE_URL to the Atlas PostgreSQL URL}
+    depends_on: {}
+    networks:
+      - default
+      - atlas-go_default
+  agent:
+    networks:
+      - default
+      - atlas-go_default
+  edge:
+    networks:
+      - default
+      - atlas-go_default
+
+networks:
+  atlas-go_default:
+    external: true

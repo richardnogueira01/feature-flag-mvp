@@ -18,7 +18,7 @@ services:
   app:
     build: .
     environment:
-      DATABASE_URL: postgres://feature_flags:${POSTGRES_PASSWORD}@postgres:5432/feature_flags?sslmode=disable
+      DATABASE_URL: postgres://feature_flags:${POSTGRES_PASSWORD}@postgres:5432/feature_flags?sslmode=disable&options=-csearch_path%3Dfeature_flags%2Cpublic
       AUTO_MIGRATE: "true"
       NATS_URL: nats://nats:4222
       NATS_SUBJECT: feature-flags.events
