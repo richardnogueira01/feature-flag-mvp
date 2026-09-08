@@ -34,3 +34,14 @@ services:
       - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       app: { condition: service_started }
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    environment:
+      AGENT_UPSTREAM_URL: http://app:8080
+      AGENT_POLL_INTERVAL: 15s
+      AGENT_ADDR: "2772"
+    ports: ["2772:2772"]
+    depends_on:
+      app: { condition: service_started }

@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/richardnogueira01/feature-flag-mvp/internal/control"
 	"net/http"
 	"strings"
@@ -73,7 +74,20 @@ func (h *Handler) collection(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, 201, f)
 	case http.MethodGet:
-		writeJSON(w, 200, map[string]any{"flags": h.service.List()})
+		flags := h.service.List()
+		var revision uint64
+		for _, flag := range flags {
+			if flag.Revision > revision {
+				revision = flag.Revision
+			}
+		}
+		etag := fmt.Sprintf("\"%d\"", revision)
+		w.Header().Set("ETag", etag)
+		if r.Header.Get("If-None-Match") == etag {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"flags": flags})
 	default:
 		w.Header().Set("Allow", "GET, POST")
 		writeError(w, 405, "method not allowed")
