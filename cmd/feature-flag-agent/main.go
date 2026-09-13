@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -22,13 +23,23 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("/v1/evaluate/", httpapi.NewEvaluateHandler(a.Store(), nil))
 	mux.Handle("/test/user-menu", agent.UserMenuHandler())
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	// /healthz and /readyz allow cross-origin reads: they carry no sensitive data and the
+	// admin dashboard (task 015) runs on the Control Plane's own origin, a different port.
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"UP"}`))
+	})
 	mux.HandleFunc("/readyz", func(w http.ResponseWriter, _ *http.Request) {
-		if a.Store().Revision() == 0 {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			return
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Content-Type", "application/json")
+		ready := a.Store().Revision() > 0
+		status := http.StatusOK
+		if !ready {
+			status = http.StatusServiceUnavailable
 		}
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(status)
+		fmt.Fprintf(w, `{"status":%q,"ready":%t,"revision":%d}`, map[bool]string{true: "READY", false: "DEGRADED"}[ready], ready, a.Store().Revision())
 	})
 	server := &http.Server{Addr: agent.ParsePort(agent.Env("AGENT_ADDR", "2772"), ":2772"), Handler: httpapi.Gzip(mux)}
 	go func() {

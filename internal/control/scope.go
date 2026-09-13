@@ -52,6 +52,7 @@ type ConfigurationSnapshot struct {
 	Environment   string       `json:"environment"`
 	Configuration string       `json:"configuration"`
 	Revision      uint64       `json:"revision"`
+	UpdatedAt     time.Time    `json:"updated_at"`
 	Flags         []ScopedFlag `json:"flags"`
 }
 

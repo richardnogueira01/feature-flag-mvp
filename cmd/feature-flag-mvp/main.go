@@ -105,6 +105,7 @@ func main() {
 	swagger := httpapi.SwaggerUIHandler()
 	mux.Handle("/swagger", swagger)
 	mux.Handle("/swagger/", swagger)
+	mux.Handle("/admin", httpapi.AdminUIHandler())
 	mux.Handle("/test/large-payload", httpapi.LargePayloadTestHandler())
 	log.Fatal(http.ListenAndServe(":8080", httpapi.Gzip(mux)))
 }

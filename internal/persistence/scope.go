@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -169,7 +170,8 @@ func (s *Store) GetConfigurationSnapshot(ctx context.Context, application, envir
 		return control.ConfigurationSnapshot{}, err
 	}
 	var revision uint64
-	if err := s.pool.QueryRow(ctx, `SELECT revision FROM configurations WHERE id=$1`, cfgID).Scan(&revision); err != nil {
+	var updatedAt time.Time
+	if err := s.pool.QueryRow(ctx, `SELECT revision, updated_at FROM configurations WHERE id=$1`, cfgID).Scan(&revision, &updatedAt); err != nil {
 		return control.ConfigurationSnapshot{}, err
 	}
 	rows, err := s.pool.Query(ctx,
@@ -196,6 +198,7 @@ func (s *Store) GetConfigurationSnapshot(ctx context.Context, application, envir
 		Environment:   environment,
 		Configuration: configuration,
 		Revision:      revision,
+		UpdatedAt:     updatedAt,
 		Flags:         flags,
 	}, nil
 }
