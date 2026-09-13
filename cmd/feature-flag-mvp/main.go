@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -22,12 +21,13 @@ import (
 func main() {
 	data := snapshot.NewStore(nil)
 	var service httpapi.Service
+	var scopeService *control.ScopeService
 	var database *persistence.Store
 	var stream nats.JetStreamContext
 	if u := os.Getenv("DATABASE_URL"); u != "" {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		pool, e := pgxpool.New(ctx, u)
+		pool, e := persistence.NewPool(ctx, u)
 		if e != nil {
 			log.Fatal(e)
 		}
@@ -44,6 +44,7 @@ func main() {
 		defer pool.Close()
 		database = persistence.NewStore(pool)
 		service = control.NewPersistentService(persistence.NewControlAdapter(database), data)
+		scopeService = control.NewScopeService(database)
 	} else {
 		service = control.NewService(data)
 	}
@@ -91,6 +92,9 @@ func main() {
 	fh := m.Middleware(httpapi.NewHandler(service))
 	mux.Handle("/v1/flags", fh)
 	mux.Handle("/v1/flags/", fh)
+	ah := httpapi.NewApplicationsHandler(scopeService)
+	mux.Handle("/v1/applications", ah)
+	mux.Handle("/v1/applications/", ah)
 	mux.Handle("/v1/evaluate/", httpapi.NewEvaluateHandler(data, m.ObserveEvaluation))
 	status := httpapi.NewStatusHandler(syncState)
 	mux.Handle("/healthz", status)

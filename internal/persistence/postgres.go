@@ -18,6 +18,23 @@ type Flag struct {
 type Store struct{ pool *pgxpool.Pool }
 
 func NewStore(p *pgxpool.Pool) *Store { return &Store{pool: p} }
+
+// NewPool opens a pgxpool pointed at databaseURL with every physical connection defaulting its
+// search_path to the feature_flags schema. Without this, only the one connection that happened
+// to run the migration's "SET search_path" sees the feature_flags/applications/environments/
+// configurations tables — every other pooled connection fails with "relation does not exist" as
+// soon as the pool grows past a single connection, which real (concurrent) usage always does.
+func NewPool(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
+	config, err := pgxpool.ParseConfig(databaseURL)
+	if err != nil {
+		return nil, err
+	}
+	config.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
+		_, err := conn.Exec(ctx, "SET search_path TO feature_flags, public")
+		return err
+	}
+	return pgxpool.NewWithConfig(ctx, config)
+}
 func (s *Store) Apply(c context.Context, k string, e bool) (Flag, error) {
 	v, _ := json.Marshal(e)
 	return s.ApplyValue(c, k, v)
